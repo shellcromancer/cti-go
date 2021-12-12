@@ -1,6 +1,7 @@
 // Package taxii provides the formats and a client for working with the Trusted
 // Automated Exchange of Intelligence Information (TAXII) protocol. TAXII is commonly
-// used to exchange cyber threat intelligence (CTI) over HTTPS.
+// used to exchange cyber threat intelligence (CTI) over HTTPS with specific URL paths.
+// Exchanged data is repesented in as Structured Threat Information Expression (STIX).
 package taxii
 
 import (
@@ -11,7 +12,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"strings"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"github.com/shellcromancer/cti-go/pkg/stix"
 )
@@ -23,10 +28,30 @@ const (
 	Version2_1 = "2.1"
 )
 
+const (
+	defaultLogLevel = zerolog.InfoLevel
+)
+
 var (
 	ErrInvalidServer      = errors.New("invalid TAXII server")
 	ErrUnsupportedVersion = errors.New("unsupported TAXII version")
 )
+
+func init() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{
+		Out: os.Stdout,
+	})
+	taxiiLogLevel, ok := os.LookupEnv("TAXII_LOG")
+	if ok {
+		l, err := zerolog.ParseLevel(taxiiLogLevel)
+		if err != nil {
+			zerolog.SetGlobalLevel(defaultLogLevel)
+		}
+		zerolog.SetGlobalLevel(l)
+	} else {
+		zerolog.SetGlobalLevel(defaultLogLevel)
+	}
+}
 
 type Client struct {
 	Server string
@@ -194,7 +219,7 @@ func (c *Client) Discovery() (d DiscoveryResp, err error) {
 		path = fmt.Sprintf("%s/taxii2/", c.Server)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, path, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, path, http.NoBody)
 	if err != nil {
 		return DiscoveryResp{}, err
 	}
@@ -226,6 +251,7 @@ func (c *Client) Discovery() (d DiscoveryResp, err error) {
 		for _, instance := range d1.ServiceInstance {
 			if instance.Type == "COLLECTION_MANAGEMENT" {
 				d.APIRoots = append(d.APIRoots, instance.Address)
+				log.Info().Msgf("Got a collection management instance: %s", instance.Text)
 			}
 		}
 	case Version2_0, Version2_1:
@@ -247,7 +273,7 @@ type APIRoot struct {
 
 func (c *Client) GetAPIRoot(rootURL string) (r *APIRoot, err error) {
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rootURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rootURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +301,7 @@ type Collection struct {
 	MediaTypes  []string `json:"media_types"`
 }
 
+// nolint: deadcode, unused
 type collectionResponseV1 struct {
 	taxiiMessageV1
 
@@ -307,18 +334,31 @@ type collectionResponseV1 struct {
 	} `xml:"Collection"`
 }
 
-func (c *Client) ListCollections(rootURL string) ([]Collection, error) {
-	if c.version == Version1_1 {
-		rootURL = strings.TrimSuffix(rootURL, "/collections")
-	}
-	path := fmt.Sprintf("%s/collections/", strings.Trim(rootURL, "/"))
-	fmt.Println("Collecting info from", path)
-
+func (c *Client) ListCollections(rootURL string) (collections []Collection, err error) {
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
-	if err != nil {
-		return nil, err
+	var req *http.Request
+
+	switch c.version {
+	case Version1_1:
+		// POST $HOST/taxii/collections
+		//
+		// <taxii_11:Collection_Information_Request xmlns:taxii_11="http://taxii.mitre.org/messages/taxii_xml_binding-1.1"message_id="26300"/>
+		url := fmt.Sprintf("%s/collections/", strings.TrimSuffix(rootURL, "/collections"))
+		body := strings.NewReader(fmt.Sprintf(`<taxii_11:Collection_Information_Request xmlns:taxii_11="http://taxii.mitre.org/messages/taxii_xml_binding-1.1"message_id="%d"/>`, 26300))
+
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+		if err != nil {
+			return nil, fmt.Errorf("taxii: failed building collections 1.1 request: %w", err)
+		}
+	case Version2_0, Version2_1:
+		// GET $HOST/taxii/collections/
+		url := fmt.Sprintf("%s/collections/", strings.Trim(rootURL, "/"))
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+		if err != nil {
+			return nil, fmt.Errorf("taxii: failed building collections 2.x request: %w", err)
+		}
 	}
+	log.Info().Msgf("making a TAXII %s collection request to %s. method=(%s)", c.version, req.URL.String(), req.Method)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -332,7 +372,7 @@ func (c *Client) ListCollections(rootURL string) ([]Collection, error) {
 		out, _ = httputil.DumpResponse(resp, true)
 		fmt.Println(string(out))
 
-		return nil, fmt.Errorf("error from server response: status=(%s) status-code=(%d) content-length=(%d)",
+		return nil, fmt.Errorf("taxii: error from fetching collections: status=(%s) status-code=(%d) content-length=(%d)",
 			resp.Status, resp.StatusCode, resp.ContentLength)
 	}
 
@@ -348,7 +388,7 @@ func (c *Client) ListCollections(rootURL string) ([]Collection, error) {
 			return nil, err
 		}
 		if respMessage.StatusType == "BAD_MESSAGE" {
-			return nil, fmt.Errorf("error from server response: status=(%s) message=(%s)",
+			return nil, fmt.Errorf("taxii: error from fetching collections: status=(%s) message=(%s)",
 				respMessage.StatusType, respMessage.Message)
 		}
 	case Version2_0, Version2_1:
@@ -378,7 +418,7 @@ func (c *Client) GetObjects(rootURL, collectionID string) (b stix.Bundle, err er
 			return stix.Bundle{}, err
 		}
 	case Version2_0, Version2_1:
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, path, http.NoBody)
 		if err != nil {
 			return stix.Bundle{}, err
 		}

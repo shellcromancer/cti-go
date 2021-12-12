@@ -1,3 +1,6 @@
+// Package stix contains the structs and a few decoding utilities for the
+// Structured Threat Information Expression (STIX) language and serialization
+// format.
 package stix
 
 import (

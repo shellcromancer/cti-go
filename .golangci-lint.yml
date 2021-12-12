@@ -1,0 +1,44 @@
+linters:
+  enable:
+  - deadcode
+  - errcheck
+  - exportloopref
+  - gocritic
+  - gofumpt
+  - goimports
+  - dupl
+  - gosimple
+  - govet
+  - ineffassign
+  - lll
+  - misspell
+  - staticcheck
+  - structcheck
+  - stylecheck
+  - typecheck
+  - unconvert
+  - unparam
+  - varcheck
+  - contextcheck
+  - noctx
+  - asciicheck
+  - bodyclose
+  - nolintlint
+  - durationcheck
+  - errname
+  - errlint
+  - goerr113
+  - gosec
+  - tagliatelle
+  - predeclared
+  - nilerr
+  - tenv
+  - wrapcheck
+  - misspell
+
+linters-settings:
+  gofumpt:
+    # the default is `1.15`.
+    lang-version: "1.17"
+    # use extra rules that are disabled by default
+    extra-rules: true

@@ -26,7 +26,7 @@ func TestTAXII_All(t *testing.T) {
 				taxii.WithVersion(tt.taxiiVersion),
 				taxii.WithServer(tt.server),
 			}
-			if tt.username != "" {
+			if tt.username != "" && tt.username != "FIXME" {
 				opts = append(opts, taxii.WithBasicAuth(tt.username, tt.password))
 			}
 

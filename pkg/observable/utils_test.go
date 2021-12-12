@@ -15,11 +15,11 @@ func TestRefangObersable(t *testing.T) {
 		{"fanged", "https://malicious.link", "https://malicious.link"},
 		{"defanged - square brackets", "https[:]//malicious[.]link", "https://malicious.link"},
 		{"defanged - round brackets", "https(:)//malicious(.)link", "https://malicious.link"},
-		{"defanged - hxxp", "hxxp://vulnerable.af", "http://vulnerable.af"},
+		{"defanged - hxxp", "hxxp://malicious.link", "http://malicious.link"},
 		{"defanged - hXXp, square brackets", "hXXps://malicious[.]link", "https://malicious.link"},
 		{"defanged - hXXp, round brackets", "hXXps://malicious(.)link", "https://malicious.link"},
 		{"defanged - square brackets", "192[.]10[.]12[.]14", "192.10.12.14"},
-		{"defanged - backtick escape (Google Chat)", "`1.1.1.1`", "1.1.1.1"},
+		{"defanged - backtick escape", "`1.1.1.1`", "1.1.1.1"},
 	}
 
 	for _, tt := range tests {

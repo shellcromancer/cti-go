@@ -1,3 +1,5 @@
+// Package observable contains utilities for classifying and propper hanlding of various
+// obersable types for CTI work.
 package observable
 
 type Type string

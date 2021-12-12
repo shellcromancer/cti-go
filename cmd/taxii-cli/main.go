@@ -12,16 +12,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	rootCmd = &cobra.Command{
-		Use:     "taxii-cli",
-		Short:   "taxii-cli is a tool for interacting with taxii servers.",
-		Version: "0.0 --HEAD",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Help()
-		},
-	}
-)
+var rootCmd = &cobra.Command{
+	Use:     "taxii-cli",
+	Short:   "taxii-cli is a tool for interacting with taxii servers.",
+	Version: "0.0 --HEAD",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Help()
+	},
+}
 
 func main() {
 	flag.Parse()
